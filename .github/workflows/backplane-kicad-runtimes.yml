@@ -91,6 +91,19 @@ jobs:
         shell: bash
         run: test "$(git rev-parse HEAD)" = 1c193606eddedbf98f8c9af5100b5e8f79da603d
 
+      - name: Export the shared enum conversions
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
+        shell: bash
+        run: |
+          # This source builds api_enums.cpp into the shared kicommon library,
+          # where a symbol is hidden unless marked, and marks only some of its
+          # conversions. macOS resolves every symbol at link time, so the
+          # editors cannot link until the rest are exported too.
+          file=common/api/api_enums.cpp
+          sed -i '' -e 's/^template<>$/template<> KICOMMON_API/' "$file"
+          test "$(grep -c '^template<>$' "$file")" -eq 0
+          test "$(grep -c '^template<> KICOMMON_API$' "$file")" -ge 26
+
       - name: Select the newest Xcode
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
         shell: bash
@@ -225,7 +238,8 @@ jobs:
           occ_prefix="$(brew --prefix opencascade)"
           test -f "$occ_prefix/include/opencascade/Standard_Version.hxx"
           cmake -S . -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/stage" -DPYTHON_FRAMEWORK_HELPER=1 -DKICAD_APPLE_MAKE_RELOCATEABLE_BUNDLE=ON -DPYTHON_FRAMEWORK="$python_framework" -DPYTHON_INCLUDE_DIR="$python_framework/Versions/3.12/include/python3.12" -DPYTHON_LIBRARY="$python_framework/Versions/3.12/lib/libpython3.12.dylib" -DNGSPICE_ROOT_DIR="$(brew --prefix libngspice)" -DNGSPICE_LIB_NAME=libngspice.dylib -DOCC_INCLUDE_DIR="$occ_prefix/include/opencascade" -DOCC_LIBRARY_DIR="$occ_prefix/lib" -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DKICAD_BUILD_QA_TESTS=OFF -DKICAD_BUILD_I18N=OFF -DKICAD_USE_SENTRY=OFF -DKICAD_SCRIPTING_WXPYTHON=OFF -DKICAD_USE_PCH=OFF -DKICAD_IPC_API=ON -DPYTHON_EXECUTABLE="$python_framework/Versions/3.12/bin/python3.12" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          cmake --build build/native --parallel 3
+          # Keep going past a failure so one run reports every error.
+          cmake --build build/native --parallel 3 -- -k 0
           cmake --install build/native
 
       - name: Configure and build Windows runtime
