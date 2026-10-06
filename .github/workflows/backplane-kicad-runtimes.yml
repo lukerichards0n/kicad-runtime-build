@@ -102,7 +102,7 @@ jobs:
             brew list --versions python@3.12 >/dev/null || exit 1
             brew link --overwrite python@3.12
           fi
-          brew install pixman cmake ninja ccache pkg-config boost cairo curl eigen fontconfig freetype glew glm harfbuzz libgit2 openssl@3 protobuf rapidjson swig zstd wxwidgets ngspice libngspice opencascade yaml-cpp libarchive nng
+          brew install pixman cmake ninja ccache pkg-config boost cairo curl eigen fontconfig freetype glew glm harfbuzz libgit2 openssl@3 protobuf rapidjson swig zstd wxwidgets ngspice libngspice opencascade yaml-cpp libarchive nng unixodbc
 
       - name: Restore vcpkg binary cache
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
