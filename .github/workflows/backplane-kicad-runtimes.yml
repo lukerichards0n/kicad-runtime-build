@@ -75,7 +75,7 @@ jobs:
         id: cache
         with:
           path: release
-          key: kicad-${{ matrix.asset }}-1c193606-${{ hashFiles('.pipeline/.github/workflows/backplane-kicad-runtimes.yml', '.pipeline/scripts/smoke-kicad-native.py') }}
+          key: kicad-${{ matrix.asset }}-1c193606-${{ hashFiles('.pipeline/.github/workflows/backplane-kicad-runtimes.yml', '.pipeline/scripts/smoke-kicad-native.py', '.pipeline/scripts/relocate-kicad-macos-bundle.sh') }}
       - name: Check out source
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
@@ -92,8 +92,8 @@ jobs:
         run: test "$(git rev-parse HEAD)" = 1c193606eddedbf98f8c9af5100b5e8f79da603d
 
       # Checking out the source empties the workspace first, which removes the
-      # copy of the smoke test fetched above. Fetch it again for the last step.
-      - name: Check out the smoke test again
+      # scripts fetched above. Fetch them again for the build and the last step.
+      - name: Check out the pipeline scripts again
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
@@ -258,6 +258,9 @@ jobs:
           # Keep going past a failure so one run reports every error.
           cmake --build build/native --parallel 3 -- -k 0
           cmake --install build/native
+          # The install step leaves Python addressed by its Homebrew path, which
+          # this runner has and a user's Mac does not.
+          bash .pipeline/scripts/relocate-kicad-macos-bundle.sh stage/KiCad.app
 
       - name: Configure and build Windows runtime
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
