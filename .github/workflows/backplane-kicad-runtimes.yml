@@ -91,6 +91,18 @@ jobs:
         shell: bash
         run: test "$(git rev-parse HEAD)" = 1c193606eddedbf98f8c9af5100b5e8f79da603d
 
+      - name: Select the newest Xcode
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
+        shell: bash
+        run: |
+          # KiCad 10 initializes aggregates with parentheses (C++20, P0960),
+          # which Apple Clang 15, the runner's default, does not implement.
+          newest="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|candidate' | sort -V | tail -n 1)"
+          sudo xcode-select -s "$newest"
+          clang --version
+          major="$(clang --version | sed -nE 's/^Apple clang version ([0-9]+)\..*/\1/p')"
+          test "${major:-0}" -ge 16 || { echo "KiCad 10 needs Apple Clang 16 or newer; this runner's newest Xcode is $newest."; exit 1; }
+
       - name: Install macOS dependencies
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
         shell: bash
