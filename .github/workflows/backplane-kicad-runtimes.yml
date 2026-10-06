@@ -237,7 +237,13 @@ jobs:
           python_framework="$(brew --prefix python@3.12)/Frameworks/Python.framework"
           occ_prefix="$(brew --prefix opencascade)"
           test -f "$occ_prefix/include/opencascade/Standard_Version.hxx"
-          cmake -S . -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/stage" -DPYTHON_FRAMEWORK_HELPER=1 -DKICAD_APPLE_MAKE_RELOCATEABLE_BUNDLE=ON -DPYTHON_FRAMEWORK="$python_framework" -DPYTHON_INCLUDE_DIR="$python_framework/Versions/3.12/include/python3.12" -DPYTHON_LIBRARY="$python_framework/Versions/3.12/lib/libpython3.12.dylib" -DNGSPICE_ROOT_DIR="$(brew --prefix libngspice)" -DNGSPICE_LIB_NAME=libngspice.dylib -DOCC_INCLUDE_DIR="$occ_prefix/include/opencascade" -DOCC_LIBRARY_DIR="$occ_prefix/lib" -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DKICAD_BUILD_QA_TESTS=OFF -DKICAD_BUILD_I18N=OFF -DKICAD_USE_SENTRY=OFF -DKICAD_SCRIPTING_WXPYTHON=OFF -DKICAD_USE_PCH=OFF -DKICAD_IPC_API=ON -DPYTHON_EXECUTABLE="$python_framework/Versions/3.12/bin/python3.12" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          # Name ngspice by its own folder. Left to search, CMake finds the copy
+          # linked into Homebrew's shared lib folder, and the install step then
+          # bundles every library in that folder as if it were ngspice's.
+          ngspice_prefix="$(brew --prefix libngspice)"
+          test -f "$ngspice_prefix/lib/libngspice.dylib"
+          test -f "$ngspice_prefix/include/ngspice/sharedspice.h"
+          cmake -S . -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/stage" -DPYTHON_FRAMEWORK_HELPER=1 -DKICAD_APPLE_MAKE_RELOCATEABLE_BUNDLE=ON -DPYTHON_FRAMEWORK="$python_framework" -DPYTHON_INCLUDE_DIR="$python_framework/Versions/3.12/include/python3.12" -DPYTHON_LIBRARY="$python_framework/Versions/3.12/lib/libpython3.12.dylib" -DNGSPICE_ROOT_DIR="$ngspice_prefix" -DNGSPICE_LIB_NAME=libngspice.dylib -DNGSPICE_INCLUDE_DIR="$ngspice_prefix/include" -DNGSPICE_LIBRARY="$ngspice_prefix/lib/libngspice.dylib" -DOCC_INCLUDE_DIR="$occ_prefix/include/opencascade" -DOCC_LIBRARY_DIR="$occ_prefix/lib" -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DKICAD_BUILD_QA_TESTS=OFF -DKICAD_BUILD_I18N=OFF -DKICAD_USE_SENTRY=OFF -DKICAD_SCRIPTING_WXPYTHON=OFF -DKICAD_USE_PCH=OFF -DKICAD_IPC_API=ON -DPYTHON_EXECUTABLE="$python_framework/Versions/3.12/bin/python3.12" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           # Keep going past a failure so one run reports every error.
           cmake --build build/native --parallel 3 -- -k 0
           cmake --install build/native
