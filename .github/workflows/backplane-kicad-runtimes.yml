@@ -91,6 +91,17 @@ jobs:
         shell: bash
         run: test "$(git rev-parse HEAD)" = 1c193606eddedbf98f8c9af5100b5e8f79da603d
 
+      # Checking out the source empties the workspace first, which removes the
+      # copy of the smoke test fetched above. Fetch it again for the last step.
+      - name: Check out the smoke test again
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          path: .pipeline
+          sparse-checkout: |
+            .github/workflows
+            scripts
+
       - name: Export the shared enum conversions
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS'
         shell: bash
