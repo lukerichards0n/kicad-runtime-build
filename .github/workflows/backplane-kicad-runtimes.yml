@@ -20,6 +20,11 @@ on:
           - arm64
           - x64
         default: all
+      with_3dmodels:
+        description: Include KiCad's 3D model library (about 3 GB). Conductor can use an installed KiCad's models or fetch them on demand instead.
+        required: false
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       platform:
@@ -32,6 +37,11 @@ on:
         required: false
         type: string
         default: all
+      with_3dmodels:
+        description: Include KiCad's 3D model library
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -75,13 +85,13 @@ jobs:
         id: cache
         with:
           path: release
-          key: kicad-${{ matrix.asset }}-1c193606-${{ hashFiles('.pipeline/.github/workflows/backplane-kicad-runtimes.yml', '.pipeline/scripts/smoke-kicad-native.py', '.pipeline/scripts/relocate-kicad-macos-bundle.sh') }}
+          key: kicad-${{ matrix.asset }}-6c8feb7b-${{ inputs.with_3dmodels == false && 'nomodels-' || '' }}${{ hashFiles('.pipeline/.github/workflows/backplane-kicad-runtimes.yml', '.pipeline/scripts/smoke-kicad-native.py', '.pipeline/scripts/relocate-kicad-macos-bundle.sh') }}
       - name: Check out source
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: i2cjak/Backplane_KiCad
-          ref: 1c193606eddedbf98f8c9af5100b5e8f79da603d
+          ref: 6c8feb7b9f3b81ab0edf0554908441398cba4fa4
           fetch-depth: 1
           clean: false
           lfs: true
@@ -89,7 +99,7 @@ jobs:
       - name: Verify source revision
         if: steps.cache.outputs.cache-hit != 'true'
         shell: bash
-        run: test "$(git rev-parse HEAD)" = 1c193606eddedbf98f8c9af5100b5e8f79da603d
+        run: test "$(git rev-parse HEAD)" = 6c8feb7b9f3b81ab0edf0554908441398cba4fa4
 
       # Checking out the source empties the workspace first, which removes the
       # scripts fetched above. Fetch them again for the build and the last step.
@@ -146,9 +156,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/vcpkg-binary-cache
-          key: backplane-kicad-vcpkg-1c193606eddedbf98f8c9af5100b5e8f79da603d-${{ github.run_id }}
+          key: backplane-kicad-vcpkg-6c8feb7b9f3b81ab0edf0554908441398cba4fa4-${{ github.run_id }}
           restore-keys: |
-            backplane-kicad-vcpkg-1c193606eddedbf98f8c9af5100b5e8f79da603d-
+            backplane-kicad-vcpkg-6c8feb7b9f3b81ab0edf0554908441398cba4fa4-
 
       - name: Install Windows dependencies
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
@@ -198,6 +208,7 @@ jobs:
           KICAD_FOOTPRINTS_COMMIT: 819223b66f96508feaeaa305301b5e6bb5c1038b
           KICAD_3DMODELS_COMMIT: e62ed1fc7862da83f789bd562671b5e4b82afcdf
           KICAD_TEMPLATES_COMMIT: 3ed4538b0f965d821df63a5fffc4441e723cfe7f
+          WITH_3DMODELS: ${{ inputs.with_3dmodels == false && 'false' || 'true' }}
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/kicad-libraries"
@@ -211,19 +222,25 @@ jobs:
           }
           clone kicad-symbols "$KICAD_SYMBOLS_COMMIT"
           clone kicad-footprints "$KICAD_FOOTPRINTS_COMMIT"
-          clone kicad-packages3D "$KICAD_3DMODELS_COMMIT"
+          libraries="kicad-symbols kicad-footprints kicad-templates"
+          if [ "$WITH_3DMODELS" = true ]; then
+            clone kicad-packages3D "$KICAD_3DMODELS_COMMIT"
+            libraries="$libraries kicad-packages3D"
+          fi
           clone kicad-templates "$KICAD_TEMPLATES_COMMIT"
           find "$root/kicad-symbols" -maxdepth 1 -type f -name '*.kicad_sym' -exec cp -a {} stage/share/kicad/symbols/ \;
           find "$root/kicad-symbols" -maxdepth 1 -type d -name '*.kicad_symdir' -exec cp -a {} stage/share/kicad/symbols/ \;
           test -n "$(find stage/share/kicad/symbols -name '*.kicad_sym' -print -quit)"
           find "$root/kicad-footprints" -maxdepth 1 -type d -name '*.pretty' -exec cp -a {} stage/share/kicad/footprints/ \;
-          find "$root/kicad-packages3D" -maxdepth 1 -type d -name '*.3dshapes' -exec cp -a {} stage/share/kicad/3dmodels/ \;
+          if [ "$WITH_3DMODELS" = true ]; then
+            find "$root/kicad-packages3D" -maxdepth 1 -type d -name '*.3dshapes' -exec cp -a {} stage/share/kicad/3dmodels/ \;
+          fi
           cp "$root/kicad-symbols/sym-lib-table" stage/share/kicad/template/
           cp "$root/kicad-footprints/fp-lib-table" stage/share/kicad/template/
           cp -a "$root/kicad-templates/Projects/." stage/share/kicad/template/
           find "$root/kicad-templates/Worksheets" -type f -name '*.kicad_wks' -exec cp {} stage/share/kicad/template/ \;
           cp -a stage/share/kicad/template/. stage/share/kicad/
-          for name in kicad-symbols kicad-footprints kicad-packages3D kicad-templates; do
+          for name in $libraries; do
             mkdir -p "stage/licenses/kicad-libraries/$name"
             cp "$root/$name/BACKPLANE_SOURCE.txt" "stage/licenses/kicad-libraries/$name/"
             find "$root/$name" -maxdepth 1 -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' -o -iname 'README*' \) -exec cp {} "stage/licenses/kicad-libraries/$name/" \;
