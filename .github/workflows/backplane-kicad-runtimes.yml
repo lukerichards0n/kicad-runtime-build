@@ -148,7 +148,14 @@ jobs:
             brew list --versions python@3.12 >/dev/null || exit 1
             brew link --overwrite python@3.12
           fi
-          brew install pixman cmake ninja ccache pkg-config boost cairo curl eigen fontconfig freetype glew glm harfbuzz libgit2 openssl@3 protobuf rapidjson swig zstd wxwidgets ngspice libngspice opencascade yaml-cpp libarchive nng unixodbc
+          brew install pixman cmake ninja ccache pkg-config boost cairo curl eigen fontconfig freetype glew glm harfbuzz libgit2 openssl@3 protobuf rapidjson swig zstd wxwidgets ngspice libngspice opencascade yaml-cpp libarchive unixodbc
+          # Homebrew's nng is 2.x, whose headers KiCad's kinng does not use;
+          # build the 1.x release it was written against, as a static library.
+          git clone --quiet --depth 1 --branch v1.12.4 https://github.com/nanomsg/nng.git "$RUNNER_TEMP/nng-src"
+          test "$(git -C "$RUNNER_TEMP/nng-src" rev-parse HEAD)" = d504cf08ae8c87885d3dc07214b47a6b9a95c4bc
+          cmake -S "$RUNNER_TEMP/nng-src" -B "$RUNNER_TEMP/nng-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/nng" -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DNNG_TESTS=OFF -DNNG_TOOLS=OFF -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }}
+          cmake --build "$RUNNER_TEMP/nng-build"
+          cmake --install "$RUNNER_TEMP/nng-build"
 
       - name: Restore vcpkg binary cache
         if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
@@ -271,7 +278,8 @@ jobs:
           ngspice_prefix="$(brew --prefix libngspice)"
           test -f "$ngspice_prefix/lib/libngspice.dylib"
           test -f "$ngspice_prefix/include/ngspice/sharedspice.h"
-          cmake -S . -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/stage" -DPYTHON_FRAMEWORK_HELPER=1 -DKICAD_APPLE_MAKE_RELOCATEABLE_BUNDLE=ON -DPYTHON_FRAMEWORK="$python_framework" -DPYTHON_INCLUDE_DIR="$python_framework/Versions/3.12/include/python3.12" -DPYTHON_LIBRARY="$python_framework/Versions/3.12/lib/libpython3.12.dylib" -DNGSPICE_ROOT_DIR="$ngspice_prefix" -DNGSPICE_LIB_NAME=libngspice.dylib -DNGSPICE_INCLUDE_DIR="$ngspice_prefix/include" -DNGSPICE_LIBRARY="$ngspice_prefix/lib/libngspice.dylib" -DOCC_INCLUDE_DIR="$occ_prefix/include/opencascade" -DOCC_LIBRARY_DIR="$occ_prefix/lib" -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DKICAD_BUILD_QA_TESTS=OFF -DKICAD_BUILD_I18N=OFF -DKICAD_USE_SENTRY=OFF -DKICAD_SCRIPTING_WXPYTHON=OFF -DKICAD_USE_PCH=OFF -DKICAD_IPC_API=ON -DPYTHON_EXECUTABLE="$python_framework/Versions/3.12/bin/python3.12" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          test -f "$RUNNER_TEMP/nng/include/nng/protocol/reqrep0/rep.h"
+          cmake -S . -B build/native -G Ninja -DNNG_INCLUDE_DIR="$RUNNER_TEMP/nng/include" -DNNG_LIBRARY="$RUNNER_TEMP/nng/lib/libnng.a" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/stage" -DPYTHON_FRAMEWORK_HELPER=1 -DKICAD_APPLE_MAKE_RELOCATEABLE_BUNDLE=ON -DPYTHON_FRAMEWORK="$python_framework" -DPYTHON_INCLUDE_DIR="$python_framework/Versions/3.12/include/python3.12" -DPYTHON_LIBRARY="$python_framework/Versions/3.12/lib/libpython3.12.dylib" -DNGSPICE_ROOT_DIR="$ngspice_prefix" -DNGSPICE_LIB_NAME=libngspice.dylib -DNGSPICE_INCLUDE_DIR="$ngspice_prefix/include" -DNGSPICE_LIBRARY="$ngspice_prefix/lib/libngspice.dylib" -DOCC_INCLUDE_DIR="$occ_prefix/include/opencascade" -DOCC_LIBRARY_DIR="$occ_prefix/lib" -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DKICAD_BUILD_QA_TESTS=OFF -DKICAD_BUILD_I18N=OFF -DKICAD_USE_SENTRY=OFF -DKICAD_SCRIPTING_WXPYTHON=OFF -DKICAD_USE_PCH=OFF -DKICAD_IPC_API=ON -DPYTHON_EXECUTABLE="$python_framework/Versions/3.12/bin/python3.12" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           # Keep going past a failure so one run reports every error.
           cmake --build build/native --parallel 3 -- -k 0
           cmake --install build/native
